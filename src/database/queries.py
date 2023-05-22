@@ -83,7 +83,8 @@ def save_code_to_user(user_id: int, code: str):
 
 def is_has_code(user_id: int) -> str | None:
     user = UserWithCode.get_or_none(user_id=user_id)
-    return user.code
+    if user:
+        return user.code
 
 
 def delete_code_from_user(user_id: int):

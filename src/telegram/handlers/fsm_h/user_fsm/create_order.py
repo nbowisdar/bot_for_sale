@@ -10,7 +10,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
 from setup import user_router
-from src.database.queries import check_promo, create_order, get_account_by_name
+from src.database.queries import check_promo, create_order, get_account_by_name, is_has_code, delete_code_from_user
 from src.schemas import OrderModel
 
 
@@ -46,9 +46,16 @@ async def set_acc_name(message: Message, state: FSMContext):
     acc = get_account_by_name(message.text)
     await state.update_data(account_name=message.text)
     await state.update_data(account_username=message.from_user.username)
-
     await state.update_data(account_id=acc.id)
     await state.update_data(account_price=acc.price)
+
+    code = is_has_code(message.from_user.id)
+    await state.update_data(disc_code=code)
+    if code:
+        await state.update_data(with_discount=True)
+    else:
+        await state.update_data(with_discount=False)
+
     await state.set_state(OrdrState.city)
     await message.reply("Введите свой город.",
                         reply_markup=cancel_btn)
@@ -65,12 +72,9 @@ async def set_acc_name(message: Message, state: FSMContext):
 @user_router.message(OrdrState.sex)
 async def set_acc_name(message: Message, state: FSMContext):
     await state.update_data(sex=message.text)
-    await state.set_state(OrdrState.with_discount)
-    await message.reply("Введите промокод (если есть).",
-                        reply_markup=ReplyKeyboardMarkup(
-                            keyboard=[[KeyboardButton(text="У меня нет промокода"), KeyboardButton(text="Отмена")]],
-                            resize_keyboard=True
-                        ))
+    await state.set_state(OrdrState.selfie)
+    await message.reply("Отправте свое селфи.",
+                        reply_markup=cancel_btn)
 
 
 @user_router.message(OrdrState.with_discount)
@@ -139,7 +143,7 @@ async def set_acc_name(message: Message, state: FSMContext):
 async def save_order(message: Message, data: dict):
     struct_data = OrderModel(**data)
     create_order(struct_data)
-    order_msg = show_order(struct_data)
+    order_msg = show_order(struct_data, struct_data.disc_code)
     # increase the amount of use
     check_promo(name=struct_data.disc_code, incr_amount=True)
 
@@ -148,3 +152,6 @@ async def save_order(message: Message, data: dict):
 
     order_msg = f"Пользователь `{message.from_user.id}` создал новый заказ!\n" + order_msg
     await send_new_order_to_admin(order_msg, struct_data.selfie)
+
+    # remove promocode from user:
+    delete_code_from_user(message.from_user.id)
